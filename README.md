@@ -40,6 +40,7 @@ shiny::runApp('app.R', port=3838, host='127.0.0.1')
 - **Interactive Navigation**: Back buttons throughout the process for easy correction
 - **Detailed Downgrade Criteria**: Comprehensive explanations of quality flags and their impacts
 - **Real-time Results**: Immediate classification recommendations with full traceability
+- **User Feedback System**: Context-aware feedback collection at each question with persistent logging
 - **Structured Data Format**: Easy-to-maintain YAML-based classification key
 - **Document Generation**: R Markdown template for generating Word documents from structured data
 
@@ -76,6 +77,7 @@ smn-escapement-estimates-toolkit/
 ├── matrix_key/            # Classification data (single source of truth)
 │   └── structured_dichotomous_key.yaml
 ├── output/                # Output files (gitignored)
+│   └── question_feedback_log.csv  # User feedback submissions
 ├── logs/                  # Log files (gitignored)
 └── tests/                 # Test files (gitignored)
 ```
@@ -119,6 +121,28 @@ rmarkdown::render("docs/generate_guidance_document.Rmd")
 - Check documentation requirements (SIL/SEN logs, QA reports)
 - Verify precision/accuracy alignment
 - Apply final downgrades if needed
+
+## 💬 User Feedback System
+
+The application includes a comprehensive feedback system that allows users to provide context-specific feedback at any point during the classification process:
+
+### Features
+- **Context-Aware Feedback**: Automatically captures the current question, phase, and classification state
+- **User Information**: Collects user name and optional email for follow-up
+- **Persistent Logging**: All feedback is saved to `output/question_feedback_log.csv` with detailed context
+- **Admin Review**: Feedback Review tab provides easy access to all submitted feedback
+
+### Feedback Data Captured
+- Timestamp and user information
+- Current classification context (phase, step, question)
+- Method family and estimation method
+- Current type classifications and downgrade flags
+- User's specific feedback text
+
+### Accessing Feedback
+- Navigate to the "Feedback Review" tab in the application
+- View all submitted feedback in a searchable, sortable table
+- Filter by user, date, phase, or other criteria
 
 ## 🔧 Configuration
 

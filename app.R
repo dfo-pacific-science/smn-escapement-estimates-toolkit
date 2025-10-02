@@ -13,26 +13,54 @@ library(shinyjs)
 
 # Source utility functions
 source("R/utils.R")
-source("R/classification_key.R")
+source("R/structured_classification_key.R")
+# source("R/classification_key.R")  # Old file - now using structured_classification_key.R
 
 # UI Definition
 ui <- dashboardPage(
-  dashboardHeader(title = "SMN Escapement Estimates Classification Toolkit"),
+  dashboardHeader(title = "Salmon Escapement Estimates Classification Toolkit"),
   
           dashboardSidebar(
             sidebarMenu(
               menuItem("Classification Key", tabName = "classifier", icon = icon("key")),
-              menuItem("Estimate Types", tabName = "types", icon = icon("table")),
+              menuItem("Estimate Type Classifications", tabName = "types", icon = icon("table")),
               menuItem("Enumeration Methods", tabName = "enumeration", icon = icon("list")),
               menuItem("Estimation Methods", tabName = "estimation", icon = icon("calculator")),
               menuItem("Downgrade Criteria", tabName = "downgrade", icon = icon("exclamation-triangle")),
               menuItem("Documentation", tabName = "docs", icon = icon("book")),
-              menuItem("Development", tabName = "development", icon = icon("code"))
+              menuItem("Known Issues", tabName = "issues", icon = icon("exclamation-circle")),
+              menuItem("Feedback Review", tabName = "feedback", icon = icon("comments"))
             )
           ),
   
   dashboardBody(
     useShinyjs(),
+    
+    # Feedback Modal (moved inside dashboardBody to ensure it's rendered)
+    tags$div(id = "feedbackModal", class = "modal fade", tabindex = "-1", role = "dialog",
+      tags$div(class = "modal-dialog", role = "document",
+        tags$div(class = "modal-content",
+          tags$div(class = "modal-header",
+            tags$h4(class = "modal-title", "Provide Feedback"),
+            tags$button(type = "button", class = "close", `data-dismiss` = "modal", "&times;")
+          ),
+          tags$div(class = "modal-body",
+            textInput("feedback_user_name", "Your Name:", placeholder = "Enter your name"),
+            textAreaInput("feedback_text", "Feedback:", 
+                         placeholder = "Please provide feedback about this question or the classification process...",
+                         rows = 4),
+            textInput("feedback_email", "Email (optional):", 
+                     placeholder = "your.email@example.com"),
+            hidden(textInput("feedback_context", "Context:", value = ""))
+          ),
+          tags$div(class = "modal-footer",
+            actionButton("submit_question_feedback", "Submit Feedback", class = "btn-primary"),
+            tags$button(type = "button", class = "btn btn-secondary", `data-dismiss` = "modal", "Cancel")
+          )
+        )
+      )
+    ),
+    
     tabItems(
               # Classification Key tab
               tabItem(tabName = "classifier",
@@ -46,7 +74,13 @@ ui <- dashboardPage(
                 fluidRow(
                   box(title = "Classification Process", status = "info", solidHeader = TRUE,
                       width = 8,
-                      uiOutput("classificationQuestions")
+                      uiOutput("classificationQuestions"),
+                      br(),
+                      div(
+                        actionButton("provide_feedback", "Provide Feedback on Current Question", 
+                                     class = "btn-info btn-sm", style = "margin-right: 10px;"),
+                        textOutput("feedback_status")
+                      )
                   ),
                   box(title = "Recommended Classification", status = "success", solidHeader = TRUE,
                       width = 4,
@@ -61,7 +95,7 @@ ui <- dashboardPage(
       # Estimate Types tab
       tabItem(tabName = "types",
         fluidRow(
-          box(title = "Estimate Type Matrix", status = "success", solidHeader = TRUE,
+          box(title = "Estimate Type Classifications", status = "success", solidHeader = TRUE,
               width = 12,
               DTOutput("typesTable")
           )
@@ -123,52 +157,109 @@ ui <- dashboardPage(
                 )
               ),
 
-              # Development tab
-              tabItem(tabName = "development",
+              # Known Issues tab
+              tabItem(tabName = "issues",
                 fluidRow(
-                  box(title = "Iterative Development Tools", status = "primary", solidHeader = TRUE,
+                  box(title = "Classification Key Issues Requiring Expert Input", status = "warning", solidHeader = TRUE,
                       width = 12,
-                      p("Tools for improving the classification key based on user feedback and testing.")
-                  )
-                ),
-                fluidRow(
-                  box(title = "Feedback Collection", status = "info", solidHeader = TRUE,
-                      width = 6,
-                      textAreaInput("feedback", "User Feedback:", 
-                                   placeholder = "Enter feedback about the classification process...",
-                                   rows = 4),
-                      textInput("user_email", "Email (optional):", 
-                               placeholder = "your.email@example.com"),
-                      actionButton("submit_feedback", "Submit Feedback", 
-                                   class = "btn-primary")
-                  ),
-                  box(title = "Key Testing", status = "success", solidHeader = TRUE,
-                      width = 6,
-                      p("Test the classification key with different scenarios:"),
-                      textInput("test_scenario", "Test Scenario Name:", 
-                               placeholder = "e.g., 'Fence with bypass issues'"),
-                      actionButton("run_test", "Run Test Scenario", 
-                                   class = "btn-success"),
-                      br(), br(),
-                      verbatimTextOutput("test_results")
-                  )
-                ),
-                fluidRow(
-                  box(title = "Key Statistics", status = "info", solidHeader = TRUE,
-                      width = 12,
-                      fluidRow(
-                        column(6,
-                          h4("Classification Key Stats"),
-                          verbatimTextOutput("key_stats")
+                      p("The following issues have been identified in the classification key and require domain expert input to resolve. These issues could lead to inconsistent classifications if not addressed."),
+                      br(),
+                      h4("High-Priority Issues", style = "color: #dc3545;"),
+                      tags$ul(
+                        tags$li(
+                          strong("1. Mixed-Method Estimates Policy"),
+                          p("No clear rule for when multiple estimation methods contribute to a single estimate. Need expert guidance on combination rules (e.g., 'overall class = min(type_of_each_component)' vs weighted approaches).")
                         ),
-                        column(6,
-                          h4("Recent Feedback"),
-                          verbatimTextOutput("recent_feedback")
+                        tags$li(
+                          strong("2. Quantifiable Thresholds for Ambiguous Terms"),
+                          p("Terms like 'negligible,' 'adequate,' 'fair,' 'defensible' need specific thresholds. Examples:"),
+                          tags$ul(
+                            tags$li("What percentage constitutes 'negligible bypass'?"),
+                            tags$li("What defines 'adequate coverage' vs 'inadequate'?"),
+                            tags$li("How is 'fair visibility' quantified?")
+                          ),
+                          p("Need domain expert to provide specific percentage thresholds or measurement criteria.")
+                        ),
+                        tags$li(
+                          strong("3. Breach Impact Quantification"),
+                          p("BREACH_BYPASS flag exists but no guidance on severity levels. Need expert input on:"),
+                          tags$ul(
+                            tags$li("What percentage of run affected triggers different downgrades?"),
+                            tags$li("How to handle peak week breaches vs early/late season breaches?"),
+                            tags$li("Should breach severity affect the downgrade level?")
+                          )
+                        ),
+                        tags$li(
+                          strong("4. Calibration Diagnostics Definition"),
+                          p("'Calibrated to Type 1/2 with diagnostics' is vague. Need expert specification of:"),
+                          tags$ul(
+                            tags$li("What constitutes valid calibration diagnostics?"),
+                            tags$li("Cross-method regression requirements?"),
+                            tags$li("CV thresholds for validation?"),
+                            tags$li("Holdout validation protocols?")
+                          )
+                        ),
+                        tags$li(
+                          strong("5. Documentation Requirements Standardization"),
+                          p("Inconsistent documentation requirement strings: 'SIL/SEN logs,' 'QA report,' 'methods/QA + SIL/SEN'. Need standardized terminology and clear definitions of what each document type contains.")
+                        ),
+                        tags$li(
+                          strong("6. Type 5 Classification Pathways"),
+                          p("Downgrade criteria mention Type 5 caps but no emission pathways. Need expert decision on whether to:"),
+                          tags$ul(
+                            tags$li("Add Type 5 pathways for 'relative, low-res' estimates"),
+                            tags$li("Remove Type 5 references if not used"),
+                            tags$li("Define what constitutes Type 5 classification")
+                          )
                         )
-                      )
-                    )
+                      ),
+                      br(),
+                      h4("Medium-Priority Issues", style = "color: #fd7e14;"),
+                      tags$ul(
+                        tags$li(
+                          strong("7. Edge Case Coverage"),
+                          p("Missing pathways for: partial-year surveys, equipment replacement mid-season, environmental DNA (eDNA) methods, acoustic telemetry approaches.")
+                        ),
+                        tags$li(
+                          strong("8. Field vs Office Application"),
+                          p("Need simplified field version vs detailed office version, reduced documentation dependency for field staff, mobile-friendly decision trees.")
+                        )
+                      ),
+                      br(),
+                      h4("Impact Assessment", style = "color: #6f42c1;"),
+                      p("These issues could lead to:"),
+                      tags$ul(
+                        tags$li("Different users arriving at different Type classifications for the same survey"),
+                        tags$li("Field staff struggling to apply the key consistently"),
+                        tags$li("Missing pathways for common survey scenarios"),
+                        tags$li("Inconsistent interpretation of ambiguous criteria")
+                      ),
+                      br(),
+                      h4("Recommendation for Next Steps", style = "color: #20c997;"),
+                      tags$ol(
+                        tags$li("Immediate: Get expert input on the 6 high-priority issues above"),
+                        tags$li("Short-term: Create quantifiable thresholds for all ambiguous terms"),
+                        tags$li("Medium-term: Develop field-friendly simplified version"),
+                        tags$li("Long-term: Add missing survey method pathways")
+                      ),
+                      br(),
+                      p(em("The key is now structurally sound and will prevent critical classification errors, but needs domain expertise to resolve the remaining policy and threshold questions."))
+                  )
+                )
+              ),
+
+              # Feedback Review tab
+              tabItem(tabName = "feedback",
+                fluidRow(
+                  box(title = "User Feedback Review", status = "info", solidHeader = TRUE,
+                      width = 12,
+                      p("Review feedback submitted by users during the classification process."),
+                      br(),
+                      DTOutput("feedbackTable")
+                  )
                 )
               )
+
     )
   )
 )
@@ -178,7 +269,6 @@ server <- function(input, output, session) {
   
   # Load classification guidance
   guidance <- reactive({
-    source("R/structured_classification_key.R", local = TRUE)
     load_structured_classification_key()
   })
   
@@ -847,19 +937,118 @@ server <- function(input, output, session) {
               filter = "top")
   })
   
-  # Handle feedback submission
-  observeEvent(input$submit_feedback, {
-    if (nchar(trimws(input$feedback)) > 0) {
-      # Create feedback entry
+  # Feedback table
+  output$feedbackTable <- renderDT({
+    feedback_file <- "output/question_feedback_log.csv"
+    if (file.exists(feedback_file)) {
+      feedback_data <- read.csv(feedback_file, stringsAsFactors = FALSE)
+      if (nrow(feedback_data) > 0) {
+        # Format the data for display
+        feedback_data$timestamp <- as.POSIXct(feedback_data$timestamp)
+        feedback_data$timestamp <- format(feedback_data$timestamp, "%Y-%m-%d %H:%M:%S")
+        datatable(feedback_data, 
+                  options = list(pageLength = 20, scrollX = TRUE),
+                  filter = "top")
+      } else {
+        datatable(data.frame(Message = "No feedback submitted yet."), 
+                  options = list(pageLength = 10))
+      }
+    } else {
+      datatable(data.frame(Message = "No feedback submitted yet."), 
+                options = list(pageLength = 10))
+    }
+  })
+  
+  # Handle feedback modal opening
+  observeEvent(input$provide_feedback, {
+    # Set the context information
+    context_info <- ""
+    if (classification_state$phase == "enumeration" && classification_state$method_family != "") {
+      guidance <- guidance()
+      key_steps <- guidance$dichotomous_key
+      method_questions <- key_steps[key_steps$method_family == classification_state$method_family, ]
+      if (classification_state$current_step <= nrow(method_questions)) {
+        current_question <- method_questions[classification_state$current_step, ]
+        context_info <- paste0("Phase 1 - Enumeration Method ", classification_state$method_family, 
+                              " - Step ", current_question$step, ": ", current_question$question)
+      }
+    } else if (classification_state$phase == "estimation") {
+      context_info <- paste0("Phase 2 - Estimation Method Selection - Method: ", 
+                            ifelse(classification_state$estimation_method == "", "Not selected", classification_state$estimation_method))
+    } else if (classification_state$phase == "documentation") {
+      context_info <- paste0("Phase 3 - Documentation Check - Candidate Type: Type-", classification_state$candidate_type)
+    } else if (classification_state$phase == "complete") {
+      context_info <- paste0("Phase 4 - Complete - Final Type: Type-", classification_state$final_type)
+    } else {
+      context_info <- "General feedback about the classification process"
+    }
+    
+    updateTextInput(session, "feedback_context", value = context_info)
+    
+    # Show the modal using JavaScript with detailed debugging
+    shinyjs::runjs("
+      console.log('=== FEEDBACK BUTTON DEBUG ===');
+      console.log('Button clicked, attempting to show modal...');
+      console.log('Modal element exists:', $('#feedbackModal').length > 0);
+      console.log('Modal element:', $('#feedbackModal')[0]);
+      console.log('Bootstrap available:', typeof $.fn.modal !== 'undefined');
+      
+      try {
+        if ($('#feedbackModal').length === 0) {
+          console.error('ERROR: Modal element not found!');
+          alert('Error: Feedback form not found. Please refresh the page.');
+        } else if (typeof $.fn.modal === 'undefined') {
+          console.error('ERROR: Bootstrap modal not available!');
+          alert('Error: Modal functionality not available. Please refresh the page.');
+        } else {
+          console.log('Attempting to show modal...');
+          $('#feedbackModal').modal('show');
+          console.log('Modal show command executed successfully');
+          
+          // Check if modal is actually visible
+          setTimeout(function() {
+            var isVisible = $('#feedbackModal').hasClass('show') || $('#feedbackModal').is(':visible');
+            console.log('Modal visible after show command:', isVisible);
+            if (!isVisible) {
+              console.error('ERROR: Modal did not become visible!');
+            }
+          }, 100);
+        }
+      } catch (error) {
+        console.error('ERROR showing modal:', error);
+        console.error('Error details:', error.message);
+        alert('Error opening feedback form: ' + error.message);
+      }
+    ")
+  })
+  
+  # Handle question feedback submission
+  observeEvent(input$submit_question_feedback, {
+    # Debug output
+    cat("Feedback submission triggered\n")
+    cat("User name length:", nchar(trimws(input$feedback_user_name)), "\n")
+    cat("Feedback text length:", nchar(trimws(input$feedback_text)), "\n")
+    
+    if (nchar(trimws(input$feedback_text)) > 0 && nchar(trimws(input$feedback_user_name)) > 0) {
+      # Create feedback entry with detailed context
       feedback_entry <- data.frame(
         timestamp = Sys.time(),
-        feedback = input$feedback,
-        email = ifelse(nchar(trimws(input$user_email)) > 0, input$user_email, "Anonymous"),
+        user_name = input$feedback_user_name,
+        email = ifelse(nchar(trimws(input$feedback_email)) > 0, input$feedback_email, ""),
+        context = input$feedback_context,
+        feedback = input$feedback_text,
+        phase = classification_state$phase,
+        method_family = classification_state$method_family,
+        current_step = classification_state$current_step,
+        estimation_method = classification_state$estimation_method,
+        candidate_type = ifelse(is.null(classification_state$candidate_type), "", classification_state$candidate_type),
+        final_type = ifelse(is.null(classification_state$final_type), "", classification_state$final_type),
+        downgrade_flags = paste(classification_state$downgrade_flags, collapse = "; "),
         stringsAsFactors = FALSE
       )
       
       # Save feedback to file
-      feedback_file <- "output/feedback_log.csv"
+      feedback_file <- "output/question_feedback_log.csv"
       if (file.exists(feedback_file)) {
         write.table(feedback_entry, feedback_file, 
                    append = TRUE, sep = ",", row.names = FALSE, col.names = FALSE)
@@ -868,90 +1057,36 @@ server <- function(input, output, session) {
       }
       
       # Clear inputs
-      updateTextAreaInput(session, "feedback", value = "")
-      updateTextInput(session, "user_email", value = "")
+      updateTextInput(session, "feedback_user_name", value = "")
+      updateTextAreaInput(session, "feedback_text", value = "")
+      updateTextInput(session, "feedback_email", value = "")
+      updateTextInput(session, "feedback_context", value = "")
+      
+      # Hide the modal
+      shinyjs::runjs("$('#feedbackModal').modal('hide');")
       
       # Show confirmation
-      showNotification("Feedback submitted successfully!", type = "success")
+      showNotification("Feedback submitted successfully! Thank you for your input.", type = "message")
     } else {
-      showNotification("Please enter feedback before submitting.", type = "warning")
+      showNotification("Please enter both your name and feedback before submitting.", type = "error")
     }
   })
   
-  # Handle test scenario execution
-  observeEvent(input$run_test, {
-    if (nchar(trimws(input$test_scenario)) > 0) {
-      # Run a test scenario
-      test_answers <- list(
-        step_1 = "yes",  # Census method
-        step_2 = "no",   # Has bypass issues
-        step_3 = "yes"   # Good documentation
-      )
-      
-      result <- run_classification_key(test_answers)
-      
-      # Save test result
-      test_entry <- data.frame(
-        timestamp = Sys.time(),
-        scenario = input$test_scenario,
-        result = result,
-        stringsAsFactors = FALSE
-      )
-      
-      test_file <- "output/test_log.csv"
-      if (file.exists(test_file)) {
-        write.table(test_entry, test_file, 
-                   append = TRUE, sep = ",", row.names = FALSE, col.names = FALSE)
-      } else {
-        write.csv(test_entry, test_file, row.names = FALSE)
-      }
-      
-      # Update test results display
-      output$test_results <- renderText({
-        paste("Test Scenario:", input$test_scenario, "\n",
-              "Result:", result, "\n",
-              "Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
-      })
-      
-      showNotification("Test scenario completed!", type = "success")
-    } else {
-      showNotification("Please enter a test scenario name.", type = "warning")
-    }
-  })
-  
-  # Render key statistics
-  output$key_stats <- renderText({
-    guidance_data <- guidance()
-    key_steps <- nrow(guidance_data$dichotomous_key)
-    enum_methods <- nrow(guidance_data$enumeration_methods)
-    est_methods <- nrow(guidance_data$estimation_methods)
-    downgrade_cats <- nrow(guidance_data$downgrade_criteria)
-    
-    paste("Key Steps:", key_steps, "\n",
-          "Enumeration Methods:", enum_methods, "\n",
-          "Estimation Methods:", est_methods, "\n",
-          "Downgrade Categories:", downgrade_cats, "\n",
-          "Last Updated:", format(file.info("docs/Updated_Escapement_Estimate_Classification_Guidance.md")$mtime, "%Y-%m-%d %H:%M"))
-  })
-  
-  # Render recent feedback
-  output$recent_feedback <- renderText({
-    feedback_file <- "output/feedback_log.csv"
+  # Feedback status display
+  output$feedback_status <- renderText({
+    feedback_file <- "output/question_feedback_log.csv"
     if (file.exists(feedback_file)) {
       feedback_data <- read.csv(feedback_file, stringsAsFactors = FALSE)
       if (nrow(feedback_data) > 0) {
-        recent <- tail(feedback_data, 3)
-        paste(apply(recent, 1, function(x) {
-          paste("Time:", format(as.POSIXct(x[1]), "%m-%d %H:%M"),
-                "Feedback:", substr(x[2], 1, 50), "...")
-        }), collapse = "\n")
+        paste("Feedback received:", nrow(feedback_data), "submissions")
       } else {
-        "No feedback submitted yet."
+        "No feedback submitted yet"
       }
     } else {
-      "No feedback submitted yet."
+      "No feedback submitted yet"
     }
   })
+  
 }
 
 # Run the application

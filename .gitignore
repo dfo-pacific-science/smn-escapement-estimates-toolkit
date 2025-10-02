@@ -1,0 +1,80 @@
+# R Environment
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+renv/library/
+renv/staging/
+
+# Python Environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Environment Variables and Secrets
+.env
+.env.local
+.env.*.local
+config/secrets.yaml
+config/*.yaml
+!config/env.example
+
+# Data files (sensitive - exclude from public repo)
+data/
+*.xlsx
+*.csv
+*.xls
+
+# Output files (user-generated content)
+output/
+logs/
+*.log
+
+# Generated documents (can be regenerated from source)
+docs/*.docx
+docs/*.pdf
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test files and debugging (excluding main test files)
+debug_*.R
+*.debug
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Node modules (if any)
+node_modules/
+
+# Compiled files
+*.o
+*.so
+*.dll
+*.dylib

@@ -1,630 +1,927 @@
-# Structured Dichotomous Key for Escapement Estimate Classification
-# This file serves as the single source of truth for the classification logic
-# It can be easily parsed by R and rendered into Word documents via R Markdown
+# Structured Dichotomous Key for Escapement Estimate Classification (Clean v1b)
+# Single source of truth; machine-parseable for R/Python engines and human-readable for SOPs.
+# All step targets reference unique global IDs (id: ...). No deprecated actions remain.
+
+meta:
+  version: "1.0.1-clean-patched"
+  author: "DSU/PSDCoP draft"
+  notes:
+    - "Every path that assigns a provisional_type MUST goto S.52 (flag_enforcement), then S.53 (final_checks)."
+    - "Type-1 eligibility is restricted to fully spanning fixed sites (A or B) meeting strict criteria."
+    - "Policy A: Branches set provisional type; Step S.50 is optional and not re-run after provisioning."
+
+# -----------------------------
+# 1) Global Action Grammar
+# -----------------------------
+action_grammar:
+  description: "Standardized action types for consistent processing"
+  allowed_actions:
+    - "goto"                              # jump to another id
+    - "record_flags"                      # add flags
+    - "provisional_type"                  # set a candidate type (integer 1-6)
+    - "set_max_type"                      # cap the maximum possible type
+    - "set_min_type"                      # set a minimum possible type
+    - "apply_flag_impacts"                # enforce caps from flags
+    - "recompute_provisional"             # recompute if current provisional violates caps
+    - "enforce_documentation_requirements"# Step 53 doc rule
+    - "enforce_precision_accuracy"        # Step 53 precision/accuracy rule
+    - "finalize"                          # end of flow; output final classification
+    - "note"                              # human-readable note (ignored by engines unless logged)
+  deprecated_actions:
+    - "then"
+    - "then2"
+    - "continue"
+    - "retain_outcome"
+    - "keep_or_downgrade"
+    - "consider_type"
+    - "treat_as"
+    - "retain_prior"
+    - "keep_type"
+    - "conditional_flags"
+
+# -----------------------------
+# 2) Gates & Dispatcher
+# -----------------------------
+gates:
+  - step: 1
+    id: G.1
+    name: data_format_gate
+    question: "Is the estimate non-numeric presence/not-detected?"
+    yes_action:
+      actions:
+        - { type: "provisional_type", value: 6 }
+        - { type: "goto", target: "S.53" }   # Presence/absence: bypass Step 52/flags, go straight to final checks
+    no_action:
+      actions:
+        - { type: "goto", target: "SEL.1" }
+
+  - step: 2
+    id: G.2
+    name: method_known_gate
+    question: "Are survey and analytical methods adequately identified and consistent?"
+    yes_action:
+      actions:
+        - { type: "goto", target: "SEL.1" }
+    no_action:
+      actions:
+        - { type: "record_flags", flags: ["METHOD_UNKNOWN"] }
+        - { type: "provisional_type", value: 5 }
+        - { type: "goto", target: "S.52" }
+
+dispatcher:
+  - step: SEL
+    id: SEL.1
+    name: method_selector
+    question: "Select primary survey/estimation method"
+    routes:
+      manual_fixed:        { type: "goto", target: "A.2" }
+      electronic_fixed:    { type: "goto", target: "B.9" }
+      hydroacoustic:       { type: "goto", target: "C.16" }
+      visual_walk:         { type: "goto", target: "D.22" }
+      snorkel:             { type: "goto", target: "E.29" }
+      aerial:              { type: "goto", target: "F.32" }
+      redd:                { type: "goto", target: "G.37" }
+      trap_model:          { type: "goto", target: "H.41" }
+      electrofish:         { type: "goto", target: "I.45" }
+      mark_recapture:      { type: "goto", target: "J.48" }
+      unknown:             { type: "goto", target: "G.2" }  # loop back; will fall into METHOD_UNKNOWN if still unknown
+
+# -----------------------------
+# 3) Enumeration Methods (A–J)
+# -----------------------------
 
 enumeration_methods:
+
   A:
     name: "Census by Manual Count at Fixed Site"
     description: "Manual counting at fence or weir"
     steps:
+
       - step: 2
+        id: A.2
         question: "Is the site a constrained opening with negligible bypass paths?"
         yes_action:
-          type: "goto"
-          target: 3
+          actions:
+            - { type: "goto", target: "A.3" }
         no_action:
-          type: "set_max_type"
-          value: 2
-          then: "goto"
-          target: 5
-          flags: []
-      
+          actions:
+            - { type: "set_max_type", value: 2 }
+            - { type: "goto", target: "A.5" }
+
       - step: 3
+        id: A.3
         question: "Were bypass/breach risks monitored and verified negligible across the run?"
         yes_action:
-          type: "goto"
-          target: 4
+          actions:
+            - { type: "goto", target: "A.4" }
         no_action:
-          type: "record_flags"
-          flags: ["BREACH_BYPASS"]
-          then: "set_max_type"
-          value: 2
-          then2: "goto"
-          target: 4
-      
+          actions:
+            - { type: "record_flags", flags: ["BREACH_BYPASS"] }
+            - { type: "set_max_type", value: 2 }
+            - { type: "goto", target: "A.4" }
+
       - step: 4
-        question: "Was run-window coverage ≥ 95% of season days and counting uptime ≥ 95%?"
+        id: A.4
+        question: "Was run-window coverage ≥ 95% and counting uptime ≥ 95%?"
         yes_action:
-          type: "goto"
-          target: 6
+          actions:
+            - { type: "goto", target: "A.6" }
         no_action:
-          type: "record_flags"
-          flags: ["RUN_COVERAGE", "UPTIME"]
-          conditional_flags:
-            - condition: "if interpolated"
-              flags: ["INFILL_METHOD"]
-          then: "set_max_type"
-          value: 2
-          then2: "goto"
-          target: 6
-      
+          actions:
+            - { type: "record_flags", flags: ["RUN_COVERAGE", "UPTIME"] }
+            - { type: "set_max_type", value: 2 }
+            - { type: "goto", target: "A.4a" }
+
+      - step: 4.1
+        id: A.4a
+        question: "Were gaps in the fixed-site record infilled by interpolation?"
+        yes_action:
+          actions:
+            - { type: "record_flags", flags: ["INFILL_METHOD"] }
+            - { type: "goto", target: "A.6" }
+        no_action:
+          actions:
+            - { type: "goto", target: "A.6" }
+
       - step: 5
-        question: "If not a constrained opening, are there defensible coverage expansions or secondary devices ensuring near-complete passage?"
+        id: A.5
+        question: "For non-constrained sites: are there defensible coverage expansions or secondary devices ensuring near-complete passage?"
         yes_action:
-          type: "treat_as"
-          value: "Type 2 candidate"
-          then: "goto"
-          target: 6
+          actions:
+            - { type: "set_max_type", value: 2 }
+            - { type: "note", value: "Treat as Type 2 candidate with defensible expansions/secondaries" }
+            - { type: "goto", target: "A.6" }
         no_action:
-          type: "treat_as"
-          value: "Type 2 at best"
-          then: "goto"
-          target: 6
-      
+          actions:
+            - { type: "set_max_type", value: 2 }
+            - { type: "note", value: "Non-constrained; Type 2 at best" }
+            - { type: "goto", target: "A.6" }
+
       - step: 6
+        id: A.6
         question: "Documentation present (SIL/SEN logs and QA report)?"
         yes_action:
-          type: "goto"
-          target: 7
+          actions:
+            - { type: "goto", target: "A.7" }
         no_action:
-          type: "record_flags"
-          flags: ["DOC"]
-          note: "any Type 1 or 2 outcome downgraded at Step 53"
-      
+          actions:
+            - { type: "record_flags", flags: ["DOC"] }
+            - { type: "goto", target: "A.7" }
+
       - step: 7
+        id: A.7
         question: "Estimation method = Fixed-Station Tally?"
         yes_action:
-          type: "provisional_type"
-          value: 1
-          condition: "if max Type allows 1"
-          else: 2
+          actions:
+            - { type: "provisional_type", value: 1 }   # Step A.2–A.6 caps may reduce this later
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "note"
-          value: "if additional estimation applied, outcome still governed by Steps 2--6. Proceed to 50."
+          actions:
+            - { type: "note", value: "Additional estimation applied; governed by Steps A.2–A.6." }
+            - { type: "provisional_type", value: 2 }   # Non-tally still capped by earlier steps
+            - { type: "goto", target: "S.52" }
 
   B:
     name: "Census by Semi-automated Electronic Count at Fixed Station"
     description: "IR/optical, resistivity, video counting"
     steps:
+
       - step: 9
+        id: B.9
         question: "Device installed at a constrained opening with negligible bypass?"
         yes_action:
-          type: "goto"
-          target: 10
+          actions:
+            - { type: "goto", target: "B.10" }
         no_action:
-          type: "set_max_type"
-          value: 2
-          then: "continue"
-      
+          actions:
+            - { type: "set_max_type", value: 2 }
+            - { type: "goto", target: "B.10" }
+
       - step: 10
+        id: B.10
         question: "Device uptime ≥ 95% with logged outages?"
         yes_action:
-          type: "goto"
-          target: 11
+          actions:
+            - { type: "goto", target: "B.11" }
         no_action:
-          type: "record_flags"
-          flags: ["UPTIME"]
-          then: "set_max_type"
-          value: 2
-      
+          actions:
+            - { type: "record_flags", flags: ["UPTIME"] }
+            - { type: "set_max_type", value: 2 }
+            - { type: "goto", target: "B.11" }
+
       - step: 11
+        id: B.11
         question: "Cross-section fully covered at opening?"
         yes_action:
-          type: "goto"
-          target: 12
+          actions:
+            - { type: "goto", target: "B.12" }
         no_action:
-          type: "record_flags"
-          flags: ["XSEC_COVERAGE"]
-          then: "set_max_type"
-          value: 2
-      
+          actions:
+            - { type: "record_flags", flags: ["XSEC_COVERAGE"] }
+            - { type: "set_max_type", value: 2 }
+            - { type: "goto", target: "B.12" }
+
       - step: 12
+        id: B.12
         question: "QA of automated events documented (review ≥10% or ≥500 events)?"
         yes_action:
-          type: "goto"
-          target: 13
+          actions:
+            - { type: "goto", target: "B.13" }
         no_action:
-          type: "record_flags"
-          flags: ["REVIEW_QA"]
-          then: "set_max_type"
-          value: 2
-      
+          actions:
+            - { type: "record_flags", flags: ["REVIEW_QA"] }
+            - { type: "set_max_type", value: 2 }
+            - { type: "goto", target: "B.13" }
+
       - step: 13
+        id: B.13
         question: "Device/environment within operational specifications?"
         yes_action:
-          type: "goto"
-          target: 14
+          actions:
+            - { type: "goto", target: "B.14" }
         no_action:
-          type: "record_flags"
-          flags: ["DEVICE_CONFIG", "ENV_COND", "VISIBILITY"]
-          then: "set_max_type"
-          value: 2
-      
+          actions:
+            - { type: "record_flags", flags: ["DEVICE_CONFIG", "ENV_COND", "VISIBILITY"] }
+            - { type: "set_max_type", value: 2 }
+            - { type: "goto", target: "B.14" }
+
       - step: 14
+        id: B.14
         question: "Documentation present (SIL/SEN + methods report)?"
         yes_action:
-          type: "goto"
-          target: 15
+          actions:
+            - { type: "goto", target: "B.15" }
         no_action:
-          type: "record_flags"
-          flags: ["DOC"]
-          note: "downgrade Type at Step 53"
-      
+          actions:
+            - { type: "record_flags", flags: ["DOC"] }
+            - { type: "goto", target: "B.15" }
+
       - step: 15
+        id: B.15
         question: "Estimation method = Fixed-Station Tally?"
         yes_action:
-          type: "provisional_type"
-          value: 1
-          condition: "if max Type allows 1"
-          else: 2
+          actions:
+            - { type: "provisional_type", value: 1 }
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "note"
-          value: "additional estimation applied; governed by Steps 9--14. Proceed to 50."
+          actions:
+            - { type: "note", value: "Additional estimation applied; governed by Steps B.9–B.14." }
+            - { type: "provisional_type", value: 2 }
+            - { type: "goto", target: "S.52" }
 
   C:
     name: "Modelled Count by Hydroacoustic Station Sonar"
-    description: "Hydroacoustic sonar counting"
-    note: "Hydroacoustic is never Type 1"
+    description: "Hydroacoustic sonar counting (never Type 1)"
     steps:
+
       - step: 16
+        id: C.16
         question: "Are all channel units effectively covered?"
         yes_action:
-          type: "goto"
-          target: 17
+          actions:
+            - { type: "goto", target: "C.17" }
         no_action:
-          type: "record_flags"
-          flags: ["XSEC_COVERAGE"]
-          note: "candidate Type 2/3"
-          then: "continue"
-      
+          actions:
+            - { type: "record_flags", flags: ["XSEC_COVERAGE"] }
+            - { type: "goto", target: "C.17" }
+
       - step: 17
+        id: C.17
         question: "Visibility/turbidity and noise within spec?"
         yes_action:
-          type: "goto"
-          target: 18
+          actions:
+            - { type: "goto", target: "C.18" }
         no_action:
-          type: "record_flags"
-          flags: ["VISIBILITY"]
-          note: "candidate Type 3"
-          then: "continue"
-      
+          actions:
+            - { type: "record_flags", flags: ["VISIBILITY"] }
+            - { type: "goto", target: "C.18" }
+
       - step: 18
+        id: C.18
         question: "Classification/attribution documented (species/size rules, validation sets)?"
         yes_action:
-          type: "goto"
-          target: 19
+          actions:
+            - { type: "goto", target: "C.19" }
         no_action:
-          type: "record_flags"
-          flags: ["CLASSIFICATION"]
-          note: "candidate Type 3"
-          then: "continue"
-      
+          actions:
+            - { type: "record_flags", flags: ["CLASSIFICATION"] }
+            - { type: "goto", target: "C.19" }
+
       - step: 19
-        question: "Uptime ≥ 90--95% with defensible interpolation?"
+        id: C.19
+        question: "Uptime ≥ 95% (or ≥90% with defensible interpolation)?"
         yes_action:
-          type: "provisional_type"
-          value: 2
+          actions:
+            - { type: "provisional_type", value: 2 }
+            - { type: "goto", target: "C.20" }
         no_action:
-          type: "record_flags"
-          flags: ["UPTIME", "INFILL_METHOD"]
-          then: "provisional_type"
-          value: 3
-      
+          actions:
+            - { type: "record_flags", flags: ["UPTIME", "INFILL_METHOD"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "C.20" }
+
       - step: 20
+        id: C.20
         question: "Documentation present (methods/QA + SIL/SEN)?"
         yes_action:
-          type: "goto"
-          target: 50
+          actions:
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "record_flags"
-          flags: ["DOC"]
-          note: "downgrade Type at Step 53"
+          actions:
+            - { type: "record_flags", flags: ["DOC"] }
+            - { type: "goto", target: "S.52" }
 
   D:
     name: "Visual Count by Stream or Bank Walk"
     description: "Visual counting by walking stream or bank"
     steps:
+
       - step: 22
+        id: D.22
         question: "≥ 5 visits spanning rise, peak, and tail (AUC candidate)?"
         yes_action:
-          type: "goto"
-          target: 23
+          actions:
+            - { type: "goto", target: "D.23" }
         no_action:
-          type: "goto"
-          target: 26
-      
+          actions:
+            - { type: "goto", target: "D.26" }
+
       - step: 23
+        id: D.23
         question: "Reach coverage ≥ 80% across the season?"
         yes_action:
-          type: "goto"
-          target: 24
+          actions:
+            - { type: "goto", target: "D.24" }
         no_action:
-          type: "record_flags"
-          flags: ["REACH_COVERAGE"]
-          note: "AUC not recommended"
-          then: "goto"
-          target: 26
-      
+          actions:
+            - { type: "record_flags", flags: ["REACH_COVERAGE"] }
+            - { type: "goto", target: "D.26" }
+
       - step: 24
+        id: D.24
         question: "Survey-life parameter documented and observer efficiency handled?"
         yes_action:
-          type: "provisional_type"
-          value: 2
+          actions:
+            - { type: "goto", target: "D.25" }
         no_action:
-          type: "note"
-          value: "treat as Peak/Index"
-          then: "goto"
-          target: 26
-      
+          actions:
+            - { type: "note", value: "Treat as Peak/Index" }
+            - { type: "goto", target: "D.26" }
+
       - step: 25
+        id: D.25
         question: "Visibility mostly fair or better; timing brackets peak?"
         yes_action:
-          type: "keep_type"
-          value: "Type 2 provisional"
+          actions:
+            - { type: "provisional_type", value: 2 }
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "record_flags"
-          flags: ["VISIBILITY", "TIMING"]
-          then: "consider_type"
-          value: 3
-      
+          actions:
+            - { type: "record_flags", flags: ["VISIBILITY", "TIMING"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
+
       - step: 26
+        id: D.26
         question: "Peak/Index path: ≥ 3 visits with one near peak?"
         yes_action:
-          type: "provisional_type"
-          value: 3
+          actions:
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "provisional_type"
-          value: 4
-          condition: "1--2 visits"
-          flags: ["VISITS"]
-      
+          actions:
+            - { type: "record_flags", flags: ["VISITS"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
+
       - step: 27
+        id: D.27
         question: "Severe visibility issues or reach coverage < 50%?"
         yes_action:
-          type: "keep_or_downgrade"
-          value: "Type 4"
+          actions:
+            - { type: "record_flags", flags: ["VISIBILITY", "REACH_COVERAGE"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "retain_prior"
-          value: "outcome"
+          actions:
+            - { type: "note", value: "retain prior outcome" }
+            - { type: "goto", target: "S.52" }
 
   E:
     name: "Visual Snorkel Count"
-    description: "Visual counting by snorkeling"
-    note: "Apply Steps 22--27, emphasizing visibility and safety"
+    description: "Visual counting by snorkeling (safety emphasis)"
     steps:
+
       - step: 29
-        question: "Apply Steps 22--27, emphasizing visibility and safety"
+        id: E.29
+        question: "≥ 5 visits spanning rise, peak, and tail (AUC candidate)?"
         yes_action:
-          type: "conditional"
-          conditions:
-            - condition: "AUC thresholds met"
-              result: "provisional Type 2"
-            - condition: "Peak/Index adequate"
-              result: "Type 3"
-            - condition: "Few visits/poor conditions"
-              result: "Type 4"
+          actions:
+            - { type: "goto", target: "E.30" }
         no_action:
-          type: "goto"
-          target: 50
+          actions:
+            - { type: "goto", target: "E.33" }
+
+      - step: 30
+        id: E.30
+        question: "Reach coverage ≥ 80% across the season?"
+        yes_action:
+          actions:
+            - { type: "goto", target: "E.31" }
+        no_action:
+          actions:
+            - { type: "record_flags", flags: ["REACH_COVERAGE"] }
+            - { type: "goto", target: "E.33" }
+
+      - step: 31
+        id: E.31
+        question: "Survey-life parameter documented and observer efficiency handled?"
+        yes_action:
+          actions:
+            - { type: "goto", target: "E.32" }
+        no_action:
+          actions:
+            - { type: "note", value: "Treat as Peak/Index" }
+            - { type: "goto", target: "E.33" }
+
+      - step: 32
+        id: E.32
+        question: "Visibility mostly fair or better; timing brackets peak? (Emphasize safety conditions)"
+        yes_action:
+          actions:
+            - { type: "provisional_type", value: 2 }
+            - { type: "goto", target: "S.52" }
+        no_action:
+          actions:
+            - { type: "record_flags", flags: ["VISIBILITY", "TIMING"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
+
+      - step: 33
+        id: E.33
+        question: "Peak/Index path: ≥ 3 visits with one near peak?"
+        yes_action:
+          actions:
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
+        no_action:
+          actions:
+            - { type: "record_flags", flags: ["VISITS"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
+
+      - step: 34
+        id: E.34
+        question: "Severe visibility issues or reach coverage < 50%?"
+        yes_action:
+          actions:
+            - { type: "record_flags", flags: ["VISIBILITY", "REACH_COVERAGE"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
+        no_action:
+          actions:
+            - { type: "note", value: "retain prior outcome" }
+            - { type: "goto", target: "S.52" }
 
   F:
     name: "Aerial Survey Count"
     description: "Helicopter, Fixed Wing, Drone counting"
     steps:
+
       - step: 32
+        id: F.32
         question: "≥ 3 flights distributed across run window?"
         yes_action:
-          type: "goto"
-          target: 33
+          actions:
+            - { type: "goto", target: "F.33" }
         no_action:
-          type: "provisional_type"
-          value: 4
-          flags: ["VISITS"]
-      
+          actions:
+            - { type: "record_flags", flags: ["VISITS"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
+
       - step: 33
+        id: F.33
         question: "Flight lines and altitude documented; coverage adequate?"
         yes_action:
-          type: "goto"
-          target: 34
+          actions:
+            - { type: "goto", target: "F.34" }
         no_action:
-          type: "record_flags"
-          flags: ["REACH_COVERAGE"]
-          then: "provisional_type"
-          value: 4
-      
+          actions:
+            - { type: "record_flags", flags: ["REACH_COVERAGE"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
+
       - step: 34
+        id: F.34
         question: "Visibility acceptable (no severe glare/turbidity)?"
         yes_action:
-          type: "provisional_type"
-          value: 3
+          actions:
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "F.35" }
         no_action:
-          type: "record_flags"
-          flags: ["VISIBILITY"]
-          then: "provisional_type"
-          value: 4
-      
+          actions:
+            - { type: "record_flags", flags: ["VISIBILITY"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
+
       - step: 35
+        id: F.35
         question: "For drone: were sensor settings/GSD documented and imagery reviewed?"
         yes_action:
-          type: "retain_outcome"
+          actions:
+            - { type: "note", value: "retain outcome" }
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "record_flags"
-          flags: ["DEVICE_CONFIG"]
-          then: "keep_type"
-          value: 4
+          actions:
+            - { type: "record_flags", flags: ["DEVICE_CONFIG"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
 
   G:
     name: "Redd Survey"
     description: "Redd counting and spawners-per-redd conversion"
     steps:
+
       - step: 37
+        id: G.37
         question: "Validated spawners-per-redd factor available?"
         yes_action:
-          type: "goto"
-          target: 38
+          actions:
+            - { type: "goto", target: "G.38" }
         no_action:
-          type: "provisional_type"
-          value: 3
-          flags: ["DETECTABILITY", "TIMING"]
-          then: "goto"
-          target: 50
-      
+          actions:
+            - { type: "record_flags", flags: ["DETECTABILITY", "TIMING"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
+
       - step: 38
+        id: G.38
         question: "Reach coverage ≥ 80% and timing aligned with peak redd visibility?"
         yes_action:
-          type: "provisional_type"
-          value: 2
+          actions:
+            - { type: "provisional_type", value: 2 }
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "record_flags"
-          flags: ["REACH_COVERAGE", "TIMING"]
-          then: "provisional_type"
-          value: 3
+          actions:
+            - { type: "record_flags", flags: ["REACH_COVERAGE", "TIMING"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
 
   H:
     name: "Modelled Count Trap Non-Spanning"
     description: "Trap-based counting with efficiency modeling"
     steps:
+
       - step: 41
+        id: H.41
         question: "Trap efficiency measured/validated?"
         yes_action:
-          type: "goto"
-          target: 42
+          actions:
+            - { type: "goto", target: "H.42" }
         no_action:
-          type: "record_flags"
-          flags: ["TRAP_EFF"]
-          then: "provisional_type"
-          value: 3
-      
+          actions:
+            - { type: "record_flags", flags: ["TRAP_EFF"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
+
       - step: 42
+        id: H.42
         question: "Cross-section coverage documented?"
         yes_action:
-          type: "goto"
-          target: 43
+          actions:
+            - { type: "goto", target: "H.43" }
         no_action:
-          type: "record_flags"
-          flags: ["XSEC_COVERAGE"]
-          then: "keep_type"
-          value: 3
-      
+          actions:
+            - { type: "record_flags", flags: ["XSEC_COVERAGE"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
+
       - step: 43
+        id: H.43
         question: "Uptime/emptying schedule sufficient?"
         yes_action:
-          type: "provisional_type"
-          value: 2
+          actions:
+            - { type: "provisional_type", value: 2 }
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "record_flags"
-          flags: ["UPTIME"]
-          then: "provisional_type"
-          value: 3
+          actions:
+            - { type: "record_flags", flags: ["UPTIME"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
 
   I:
     name: "Electrofishing"
     description: "CPUE Index based on electrofishing"
     steps:
+
       - step: 45
+        id: I.45
         question: "Effort standardized (passes, voltage, time, crew, reach)?"
         yes_action:
-          type: "goto"
-          target: 46
+          actions:
+            - { type: "goto", target: "I.46" }
         no_action:
-          type: "record_flags"
-          flags: ["EFF_STD"]
-          then: "provisional_type"
-          value: 4
-      
+          actions:
+            - { type: "record_flags", flags: ["EFF_STD"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
+
       - step: 46
+        id: I.46
         question: "Spatial coverage and timing comparable across years?"
         yes_action:
-          type: "provisional_type"
-          value: 3
+          actions:
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "record_flags"
-          flags: ["REACH_COVERAGE", "TIMING"]
-          then: "provisional_type"
-          value: 4
+          actions:
+            - { type: "record_flags", flags: ["REACH_COVERAGE", "TIMING"] }
+            - { type: "provisional_type", value: 4 }
+            - { type: "goto", target: "S.52" }
 
   J:
     name: "Mark-Recapture Modelled Count"
     description: "Mark-recapture analysis for population estimation"
     steps:
+
       - step: 48
+        id: J.48
         question: "Were MR assumptions evaluated (closure, catchability, tag loss)?"
         yes_action:
-          type: "goto"
-          target: 49
+          actions:
+            - { type: "goto", target: "J.49" }
         no_action:
-          type: "record_flags"
-          flags: ["MR_ASSUMP"]
-          then: "provisional_type"
-          value: 3
-      
+          actions:
+            - { type: "record_flags", flags: ["MR_ASSUMP"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
+
       - step: 49
+        id: J.49
         question: "Is recovery coverage adequate and documented?"
         yes_action:
-          type: "provisional_type"
-          value: 2
+          actions:
+            - { type: "provisional_type", value: 2 }
+            - { type: "goto", target: "S.52" }
         no_action:
-          type: "record_flags"
-          flags: ["REACH_COVERAGE"]
-          then: "provisional_type"
-          value: 3
+          actions:
+            - { type: "record_flags", flags: ["REACH_COVERAGE"] }
+            - { type: "provisional_type", value: 3 }
+            - { type: "goto", target: "S.52" }
 
-# Estimation Method Mapping (Step 50)
+# -----------------------------
+# 4) Estimation Method Mapping (Optional Step S.50)
+# Use this only when classification is derived primarily from method rules,
+# not when a branch already set a provisional_type (A–J already do so).
+# -----------------------------
 estimation_methods:
-  fixed_station:
-    name: "Fixed-Station Tally"
-    rules:
-      - condition: "Steps 2--7 or 9--15 satisfied"
-        result: "Type 1 if max Type allows 1"
-        else: "Type 2"
-  
-  hydroacoustic:
-    name: "Hydroacoustic Modelling"
-    rules:
-      - condition: "always"
-        result: "Type 2"
-  
-  auc:
-    name: "Area Under the Curve"
-    rules:
-      - condition: "Steps 22--25 (or snorkel equivalents) met"
-        result: "Type 2"
-        else: "Peak/Index (Type 3)"
-  
-  peak_count:
-    name: "Peak Count Analysis"
-    rules:
-      - condition: "≥ 3 visits"
-        result: "Type 3"
-        else: "Type 4 with ≤ 4 visits"
-  
-  mark_recapture:
-    name: "Mark--Recapture Analysis"
-    rules:
-      - condition: "Steps 48--49 satisfied"
-        result: "Type 2"
-        else: "Type 3"
-  
-  time_series:
-    name: "Calibrated Time Series"
-    rules:
-      - condition: "calibrated to Type 1/2 with diagnostics"
-        result: "Type 2"
-        else: "Type 3"
-  
-  expansion:
-    name: "Expansion/Mathematical Operations"
-    rules:
-      - condition: "weak provenance"
-        result: "downgrade one Type"
-        else: "inherit base"
+  step: 50
+  id: S.50
+  rules:
+    fixed_station:
+      name: "Fixed-Station Tally"
+      rules:
+        - condition: "fixed_site_criteria_met"     # i.e., A/B strict Type-1 eligibility
+          result: "Type 1"
+        - condition: "else"
+          result: "Type 2"
 
-# Final Documentation and Accuracy Gate (Step 53)
+    hydroacoustic:
+      name: "Hydroacoustic Modelling"
+      rules:
+        - condition: "steps_16_19_all_met"
+          definition: "coverage_ok && env_ok && classification_ok && (uptime>=0.95 OR (uptime>=0.90 && infill_defensible))"
+          result: "Type 2"
+        - condition: "else"
+          result: "Type 3"
+
+    auc:
+      name: "Area Under the Curve"
+      rules:
+        - condition: "AUC.criteria_met"            # D/E 22–25 equivalents
+          result: "Type 2"
+        - condition: "else"
+          result: "Type 3"
+
+    peak_count:
+      name: "Peak Count Analysis"
+      rules:
+        - condition: "visits>=3 && near_peak>=1"
+          result: "Type 3"
+        - condition: "visits in [1,2]"
+          result: "Type 4"
+
+    mark_recapture:
+      name: "Mark-Recapture Analysis"
+      rules:
+        - condition: "MR.criteria_met"
+          result: "Type 2"
+        - condition: "else"
+          result: "Type 3"
+
+    time_series:
+      name: "Calibrated Time Series"
+      rules:
+        - condition: "calibrated_to_type_1_or_2_with_diagnostics"
+          result: "Type 2"
+        - condition: "else"
+          result: "Type 3"
+
+    expansion:
+      name: "Expansion/Mathematical Operations"
+      rules:
+        - condition: "weak_provenance"
+          result: "downgrade_one_type"
+        - condition: "else"
+          result: "inherit_base"
+
+    aerial:
+      name: "Aerial Survey Analysis"
+      rules:
+        - condition: "flights>=3 && coverage_ok && visibility_ok"
+          result: "Type 3"
+        - condition: "else"
+          result: "Type 4"
+
+    redd:
+      name: "Redd Survey Conversion"
+      rules:
+        - condition: "spr_validated && coverage>=0.8 && timing_ok"
+          result: "Type 2"
+        - condition: "else"
+          result: "Type 3"
+
+    trap_model:
+      name: "Trap Model (Non-Spanning)"
+      rules:
+        - condition: "efficiency_validated && uptime_ok"
+          result: "Type 2"
+        - condition: "else"
+          result: "Type 3"
+
+    electrofish:
+      name: "Electrofishing CPUE"
+      rules:
+        - condition: "effort_standardized && coverage_timing_comparable"
+          result: "Type 3"
+        - condition: "else"
+          result: "Type 4"
+
+# -----------------------------
+# 5) Flag Enforcement (Step S.52) & Final Checks (Step S.53)
+# -----------------------------
+flag_enforcement:
+  step: 52
+  id: S.52
+  description: "Apply all caps/downgrades implied by recorded flags"
+  actions:
+    - { type: "apply_flag_impacts" }
+    - { type: "recompute_provisional" }
+  goto: "S.53"
+
 final_checks:
-  documentation:
-    description: "For Type 1/2: are SIL/SEN logs and a QA report present?"
-    required_for_types: [1, 2]
-    action_if_missing: "downgrade one Type"
-    flag: "DOC"
-  
-  precision_accuracy:
-    description: "Do Precision/Accuracy align with candidate Type?"
-    action_if_weaker: "downgrade one Type"
-    flag: "PRECISION_ACCURACY"
+  step: 53
+  id: S.53
+  actions:
+    - { type: "enforce_documentation_requirements" }  # uses DOC rule
+    - { type: "enforce_precision_accuracy" }          # uses PRECISION_ACCURACY rule
+    - { type: "finalize" }
 
-# Downgrade Criteria Definitions
+# -----------------------------
+# 6) Downgrade Criteria Definitions
+# -----------------------------
 downgrade_criteria:
   BREACH_BYPASS:
     name: "Bypass/Breach Risk"
     description: "Bypass or breach risks not monitored and verified negligible"
     impact: "Limits to Type 2 maximum"
-  
+
   RUN_COVERAGE:
     name: "Run Coverage"
     description: "Run-window coverage < 95% of season days"
     impact: "Limits to Type 2 maximum"
-  
+
   UPTIME:
     name: "Uptime"
-    description: "Counting uptime < 95% or device uptime < 95%"
+    description: "Counting uptime < 95% (or device uptime < 95%); <90% triggers INFILL_METHOD flag if interpolated"
     impact: "Limits to Type 2 maximum"
-  
+
   INFILL_METHOD:
     name: "Infill Method"
-    description: "Interpolation method used for missing data"
+    description: "Interpolation used for missing data; defensibility must be documented"
     impact: "Limits to Type 2 maximum"
-  
+
   DOC:
     name: "Documentation"
     description: "Missing SIL/SEN logs or QA report"
     impact: "Downgrades Type 1/2 by one level"
-  
+
   XSEC_COVERAGE:
     name: "Cross-section Coverage"
     description: "Incomplete cross-section coverage"
     impact: "Limits to Type 2 maximum"
-  
+
   REVIEW_QA:
     name: "Review/QA"
     description: "Insufficient QA review of automated events"
     impact: "Limits to Type 2 maximum"
-  
+
   DEVICE_CONFIG:
     name: "Device Configuration"
     description: "Device not within operational specifications"
     impact: "Limits to Type 2 maximum"
-  
+
   ENV_COND:
     name: "Environmental Conditions"
     description: "Environmental conditions outside specifications"
     impact: "Limits to Type 2 maximum"
-  
+
   VISIBILITY:
     name: "Visibility"
     description: "Poor visibility conditions"
     impact: "Limits to Type 3 maximum"
-  
+
   CLASSIFICATION:
     name: "Classification"
     description: "Classification/attribution not documented"
     impact: "Limits to Type 3 maximum"
-  
+
   REACH_COVERAGE:
     name: "Reach Coverage"
     description: "Insufficient reach coverage"
     impact: "Limits to Type 3 maximum"
-  
+
   TIMING:
     name: "Timing"
     description: "Poor timing of surveys"
     impact: "Limits to Type 3 maximum"
-  
+
   VISITS:
     name: "Number of Visits"
     description: "Insufficient number of survey visits"
     impact: "Limits to Type 4 maximum"
-  
+
   TRAP_EFF:
     name: "Trap Efficiency"
     description: "Trap efficiency not measured/validated"
     impact: "Limits to Type 3 maximum"
-  
+
   EFF_STD:
     name: "Effort Standardization"
     description: "Effort not standardized"
     impact: "Limits to Type 4 maximum"
-  
+
   MR_ASSUMP:
     name: "Mark-Recapture Assumptions"
     description: "MR assumptions not evaluated"
     impact: "Limits to Type 3 maximum"
-  
+
   DETECTABILITY:
     name: "Detectability"
     description: "Detectability factors not validated"
     impact: "Limits to Type 3 maximum"
-  
+
   PRECISION_ACCURACY:
     name: "Precision/Accuracy"
     description: "Precision/accuracy weaker than expected for type"
     impact: "Downgrades by one level"
+
+  METHOD_UNKNOWN:
+    name: "Method Unknown/Inconsistent"
+    description: "Survey/analytical methods not adequately identified/consistent"
+    impact: "Limits to Type 5 maximum"
+
+# -----------------------------
+# 7) Invariants (Sanity Checks)
+# -----------------------------
+invariants:
+  description: "Rules that must always be true for valid classifications"
+  rules:
+    - name: "Hydroacoustic Type 1 Prevention"
+      check: "method == 'hydroacoustic' AND final_type == 1"
+      result: "ERROR"
+
+    - name: "Bypass/Coverage Type 1 Prevention"
+      check: "(flags.has('BREACH_BYPASS') OR flags.has('XSEC_COVERAGE')) AND final_type == 1"
+      result: "ERROR"
+
+    - name: "Peak/Index Visit Logic"
+      check: "method == 'peak_count' AND visits == 0"
+      result: "REJECT_CLASSIFICATION"
+
+    - name: "Documentation Downgrade Applied"
+      check: "flags.has('DOC') AND (provisional_type in [1,2]) AND final_type not in [2,3]"
+      result: "ERROR"   # implies doc rule not applied correctly
+
+    - name: "Type 3 Maximum Enforcement"
+      check: "(flags.has('VISIBILITY') OR flags.has('CLASSIFICATION') OR flags.has('REACH_COVERAGE') OR flags.has('TIMING')) AND final_type < 3"
+      result: "ERROR"
+
+    - name: "Type-1 Eligibility Guard"
+      check: "final_type == 1 AND NOT fixed_site_criteria_met"
+      result: "ERROR"
+
+    - name: "Type 5 Enforcement for Method Unknown"
+      check: "flags.has('METHOD_UNKNOWN') AND final_type != 5"
+      result: "ERROR"
