@@ -1,0 +1,630 @@
+# Structured Dichotomous Key for Escapement Estimate Classification
+# This file serves as the single source of truth for the classification logic
+# It can be easily parsed by R and rendered into Word documents via R Markdown
+
+enumeration_methods:
+  A:
+    name: "Census by Manual Count at Fixed Site"
+    description: "Manual counting at fence or weir"
+    steps:
+      - step: 2
+        question: "Is the site a constrained opening with negligible bypass paths?"
+        yes_action:
+          type: "goto"
+          target: 3
+        no_action:
+          type: "set_max_type"
+          value: 2
+          then: "goto"
+          target: 5
+          flags: []
+      
+      - step: 3
+        question: "Were bypass/breach risks monitored and verified negligible across the run?"
+        yes_action:
+          type: "goto"
+          target: 4
+        no_action:
+          type: "record_flags"
+          flags: ["BREACH_BYPASS"]
+          then: "set_max_type"
+          value: 2
+          then2: "goto"
+          target: 4
+      
+      - step: 4
+        question: "Was run-window coverage ≥ 95% of season days and counting uptime ≥ 95%?"
+        yes_action:
+          type: "goto"
+          target: 6
+        no_action:
+          type: "record_flags"
+          flags: ["RUN_COVERAGE", "UPTIME"]
+          conditional_flags:
+            - condition: "if interpolated"
+              flags: ["INFILL_METHOD"]
+          then: "set_max_type"
+          value: 2
+          then2: "goto"
+          target: 6
+      
+      - step: 5
+        question: "If not a constrained opening, are there defensible coverage expansions or secondary devices ensuring near-complete passage?"
+        yes_action:
+          type: "treat_as"
+          value: "Type 2 candidate"
+          then: "goto"
+          target: 6
+        no_action:
+          type: "treat_as"
+          value: "Type 2 at best"
+          then: "goto"
+          target: 6
+      
+      - step: 6
+        question: "Documentation present (SIL/SEN logs and QA report)?"
+        yes_action:
+          type: "goto"
+          target: 7
+        no_action:
+          type: "record_flags"
+          flags: ["DOC"]
+          note: "any Type 1 or 2 outcome downgraded at Step 53"
+      
+      - step: 7
+        question: "Estimation method = Fixed-Station Tally?"
+        yes_action:
+          type: "provisional_type"
+          value: 1
+          condition: "if max Type allows 1"
+          else: 2
+        no_action:
+          type: "note"
+          value: "if additional estimation applied, outcome still governed by Steps 2--6. Proceed to 50."
+
+  B:
+    name: "Census by Semi-automated Electronic Count at Fixed Station"
+    description: "IR/optical, resistivity, video counting"
+    steps:
+      - step: 9
+        question: "Device installed at a constrained opening with negligible bypass?"
+        yes_action:
+          type: "goto"
+          target: 10
+        no_action:
+          type: "set_max_type"
+          value: 2
+          then: "continue"
+      
+      - step: 10
+        question: "Device uptime ≥ 95% with logged outages?"
+        yes_action:
+          type: "goto"
+          target: 11
+        no_action:
+          type: "record_flags"
+          flags: ["UPTIME"]
+          then: "set_max_type"
+          value: 2
+      
+      - step: 11
+        question: "Cross-section fully covered at opening?"
+        yes_action:
+          type: "goto"
+          target: 12
+        no_action:
+          type: "record_flags"
+          flags: ["XSEC_COVERAGE"]
+          then: "set_max_type"
+          value: 2
+      
+      - step: 12
+        question: "QA of automated events documented (review ≥10% or ≥500 events)?"
+        yes_action:
+          type: "goto"
+          target: 13
+        no_action:
+          type: "record_flags"
+          flags: ["REVIEW_QA"]
+          then: "set_max_type"
+          value: 2
+      
+      - step: 13
+        question: "Device/environment within operational specifications?"
+        yes_action:
+          type: "goto"
+          target: 14
+        no_action:
+          type: "record_flags"
+          flags: ["DEVICE_CONFIG", "ENV_COND", "VISIBILITY"]
+          then: "set_max_type"
+          value: 2
+      
+      - step: 14
+        question: "Documentation present (SIL/SEN + methods report)?"
+        yes_action:
+          type: "goto"
+          target: 15
+        no_action:
+          type: "record_flags"
+          flags: ["DOC"]
+          note: "downgrade Type at Step 53"
+      
+      - step: 15
+        question: "Estimation method = Fixed-Station Tally?"
+        yes_action:
+          type: "provisional_type"
+          value: 1
+          condition: "if max Type allows 1"
+          else: 2
+        no_action:
+          type: "note"
+          value: "additional estimation applied; governed by Steps 9--14. Proceed to 50."
+
+  C:
+    name: "Modelled Count by Hydroacoustic Station Sonar"
+    description: "Hydroacoustic sonar counting"
+    note: "Hydroacoustic is never Type 1"
+    steps:
+      - step: 16
+        question: "Are all channel units effectively covered?"
+        yes_action:
+          type: "goto"
+          target: 17
+        no_action:
+          type: "record_flags"
+          flags: ["XSEC_COVERAGE"]
+          note: "candidate Type 2/3"
+          then: "continue"
+      
+      - step: 17
+        question: "Visibility/turbidity and noise within spec?"
+        yes_action:
+          type: "goto"
+          target: 18
+        no_action:
+          type: "record_flags"
+          flags: ["VISIBILITY"]
+          note: "candidate Type 3"
+          then: "continue"
+      
+      - step: 18
+        question: "Classification/attribution documented (species/size rules, validation sets)?"
+        yes_action:
+          type: "goto"
+          target: 19
+        no_action:
+          type: "record_flags"
+          flags: ["CLASSIFICATION"]
+          note: "candidate Type 3"
+          then: "continue"
+      
+      - step: 19
+        question: "Uptime ≥ 90--95% with defensible interpolation?"
+        yes_action:
+          type: "provisional_type"
+          value: 2
+        no_action:
+          type: "record_flags"
+          flags: ["UPTIME", "INFILL_METHOD"]
+          then: "provisional_type"
+          value: 3
+      
+      - step: 20
+        question: "Documentation present (methods/QA + SIL/SEN)?"
+        yes_action:
+          type: "goto"
+          target: 50
+        no_action:
+          type: "record_flags"
+          flags: ["DOC"]
+          note: "downgrade Type at Step 53"
+
+  D:
+    name: "Visual Count by Stream or Bank Walk"
+    description: "Visual counting by walking stream or bank"
+    steps:
+      - step: 22
+        question: "≥ 5 visits spanning rise, peak, and tail (AUC candidate)?"
+        yes_action:
+          type: "goto"
+          target: 23
+        no_action:
+          type: "goto"
+          target: 26
+      
+      - step: 23
+        question: "Reach coverage ≥ 80% across the season?"
+        yes_action:
+          type: "goto"
+          target: 24
+        no_action:
+          type: "record_flags"
+          flags: ["REACH_COVERAGE"]
+          note: "AUC not recommended"
+          then: "goto"
+          target: 26
+      
+      - step: 24
+        question: "Survey-life parameter documented and observer efficiency handled?"
+        yes_action:
+          type: "provisional_type"
+          value: 2
+        no_action:
+          type: "note"
+          value: "treat as Peak/Index"
+          then: "goto"
+          target: 26
+      
+      - step: 25
+        question: "Visibility mostly fair or better; timing brackets peak?"
+        yes_action:
+          type: "keep_type"
+          value: "Type 2 provisional"
+        no_action:
+          type: "record_flags"
+          flags: ["VISIBILITY", "TIMING"]
+          then: "consider_type"
+          value: 3
+      
+      - step: 26
+        question: "Peak/Index path: ≥ 3 visits with one near peak?"
+        yes_action:
+          type: "provisional_type"
+          value: 3
+        no_action:
+          type: "provisional_type"
+          value: 4
+          condition: "1--2 visits"
+          flags: ["VISITS"]
+      
+      - step: 27
+        question: "Severe visibility issues or reach coverage < 50%?"
+        yes_action:
+          type: "keep_or_downgrade"
+          value: "Type 4"
+        no_action:
+          type: "retain_prior"
+          value: "outcome"
+
+  E:
+    name: "Visual Snorkel Count"
+    description: "Visual counting by snorkeling"
+    note: "Apply Steps 22--27, emphasizing visibility and safety"
+    steps:
+      - step: 29
+        question: "Apply Steps 22--27, emphasizing visibility and safety"
+        yes_action:
+          type: "conditional"
+          conditions:
+            - condition: "AUC thresholds met"
+              result: "provisional Type 2"
+            - condition: "Peak/Index adequate"
+              result: "Type 3"
+            - condition: "Few visits/poor conditions"
+              result: "Type 4"
+        no_action:
+          type: "goto"
+          target: 50
+
+  F:
+    name: "Aerial Survey Count"
+    description: "Helicopter, Fixed Wing, Drone counting"
+    steps:
+      - step: 32
+        question: "≥ 3 flights distributed across run window?"
+        yes_action:
+          type: "goto"
+          target: 33
+        no_action:
+          type: "provisional_type"
+          value: 4
+          flags: ["VISITS"]
+      
+      - step: 33
+        question: "Flight lines and altitude documented; coverage adequate?"
+        yes_action:
+          type: "goto"
+          target: 34
+        no_action:
+          type: "record_flags"
+          flags: ["REACH_COVERAGE"]
+          then: "provisional_type"
+          value: 4
+      
+      - step: 34
+        question: "Visibility acceptable (no severe glare/turbidity)?"
+        yes_action:
+          type: "provisional_type"
+          value: 3
+        no_action:
+          type: "record_flags"
+          flags: ["VISIBILITY"]
+          then: "provisional_type"
+          value: 4
+      
+      - step: 35
+        question: "For drone: were sensor settings/GSD documented and imagery reviewed?"
+        yes_action:
+          type: "retain_outcome"
+        no_action:
+          type: "record_flags"
+          flags: ["DEVICE_CONFIG"]
+          then: "keep_type"
+          value: 4
+
+  G:
+    name: "Redd Survey"
+    description: "Redd counting and spawners-per-redd conversion"
+    steps:
+      - step: 37
+        question: "Validated spawners-per-redd factor available?"
+        yes_action:
+          type: "goto"
+          target: 38
+        no_action:
+          type: "provisional_type"
+          value: 3
+          flags: ["DETECTABILITY", "TIMING"]
+          then: "goto"
+          target: 50
+      
+      - step: 38
+        question: "Reach coverage ≥ 80% and timing aligned with peak redd visibility?"
+        yes_action:
+          type: "provisional_type"
+          value: 2
+        no_action:
+          type: "record_flags"
+          flags: ["REACH_COVERAGE", "TIMING"]
+          then: "provisional_type"
+          value: 3
+
+  H:
+    name: "Modelled Count Trap Non-Spanning"
+    description: "Trap-based counting with efficiency modeling"
+    steps:
+      - step: 41
+        question: "Trap efficiency measured/validated?"
+        yes_action:
+          type: "goto"
+          target: 42
+        no_action:
+          type: "record_flags"
+          flags: ["TRAP_EFF"]
+          then: "provisional_type"
+          value: 3
+      
+      - step: 42
+        question: "Cross-section coverage documented?"
+        yes_action:
+          type: "goto"
+          target: 43
+        no_action:
+          type: "record_flags"
+          flags: ["XSEC_COVERAGE"]
+          then: "keep_type"
+          value: 3
+      
+      - step: 43
+        question: "Uptime/emptying schedule sufficient?"
+        yes_action:
+          type: "provisional_type"
+          value: 2
+        no_action:
+          type: "record_flags"
+          flags: ["UPTIME"]
+          then: "provisional_type"
+          value: 3
+
+  I:
+    name: "Electrofishing"
+    description: "CPUE Index based on electrofishing"
+    steps:
+      - step: 45
+        question: "Effort standardized (passes, voltage, time, crew, reach)?"
+        yes_action:
+          type: "goto"
+          target: 46
+        no_action:
+          type: "record_flags"
+          flags: ["EFF_STD"]
+          then: "provisional_type"
+          value: 4
+      
+      - step: 46
+        question: "Spatial coverage and timing comparable across years?"
+        yes_action:
+          type: "provisional_type"
+          value: 3
+        no_action:
+          type: "record_flags"
+          flags: ["REACH_COVERAGE", "TIMING"]
+          then: "provisional_type"
+          value: 4
+
+  J:
+    name: "Mark-Recapture Modelled Count"
+    description: "Mark-recapture analysis for population estimation"
+    steps:
+      - step: 48
+        question: "Were MR assumptions evaluated (closure, catchability, tag loss)?"
+        yes_action:
+          type: "goto"
+          target: 49
+        no_action:
+          type: "record_flags"
+          flags: ["MR_ASSUMP"]
+          then: "provisional_type"
+          value: 3
+      
+      - step: 49
+        question: "Is recovery coverage adequate and documented?"
+        yes_action:
+          type: "provisional_type"
+          value: 2
+        no_action:
+          type: "record_flags"
+          flags: ["REACH_COVERAGE"]
+          then: "provisional_type"
+          value: 3
+
+# Estimation Method Mapping (Step 50)
+estimation_methods:
+  fixed_station:
+    name: "Fixed-Station Tally"
+    rules:
+      - condition: "Steps 2--7 or 9--15 satisfied"
+        result: "Type 1 if max Type allows 1"
+        else: "Type 2"
+  
+  hydroacoustic:
+    name: "Hydroacoustic Modelling"
+    rules:
+      - condition: "always"
+        result: "Type 2"
+  
+  auc:
+    name: "Area Under the Curve"
+    rules:
+      - condition: "Steps 22--25 (or snorkel equivalents) met"
+        result: "Type 2"
+        else: "Peak/Index (Type 3)"
+  
+  peak_count:
+    name: "Peak Count Analysis"
+    rules:
+      - condition: "≥ 3 visits"
+        result: "Type 3"
+        else: "Type 4 with ≤ 4 visits"
+  
+  mark_recapture:
+    name: "Mark--Recapture Analysis"
+    rules:
+      - condition: "Steps 48--49 satisfied"
+        result: "Type 2"
+        else: "Type 3"
+  
+  time_series:
+    name: "Calibrated Time Series"
+    rules:
+      - condition: "calibrated to Type 1/2 with diagnostics"
+        result: "Type 2"
+        else: "Type 3"
+  
+  expansion:
+    name: "Expansion/Mathematical Operations"
+    rules:
+      - condition: "weak provenance"
+        result: "downgrade one Type"
+        else: "inherit base"
+
+# Final Documentation and Accuracy Gate (Step 53)
+final_checks:
+  documentation:
+    description: "For Type 1/2: are SIL/SEN logs and a QA report present?"
+    required_for_types: [1, 2]
+    action_if_missing: "downgrade one Type"
+    flag: "DOC"
+  
+  precision_accuracy:
+    description: "Do Precision/Accuracy align with candidate Type?"
+    action_if_weaker: "downgrade one Type"
+    flag: "PRECISION_ACCURACY"
+
+# Downgrade Criteria Definitions
+downgrade_criteria:
+  BREACH_BYPASS:
+    name: "Bypass/Breach Risk"
+    description: "Bypass or breach risks not monitored and verified negligible"
+    impact: "Limits to Type 2 maximum"
+  
+  RUN_COVERAGE:
+    name: "Run Coverage"
+    description: "Run-window coverage < 95% of season days"
+    impact: "Limits to Type 2 maximum"
+  
+  UPTIME:
+    name: "Uptime"
+    description: "Counting uptime < 95% or device uptime < 95%"
+    impact: "Limits to Type 2 maximum"
+  
+  INFILL_METHOD:
+    name: "Infill Method"
+    description: "Interpolation method used for missing data"
+    impact: "Limits to Type 2 maximum"
+  
+  DOC:
+    name: "Documentation"
+    description: "Missing SIL/SEN logs or QA report"
+    impact: "Downgrades Type 1/2 by one level"
+  
+  XSEC_COVERAGE:
+    name: "Cross-section Coverage"
+    description: "Incomplete cross-section coverage"
+    impact: "Limits to Type 2 maximum"
+  
+  REVIEW_QA:
+    name: "Review/QA"
+    description: "Insufficient QA review of automated events"
+    impact: "Limits to Type 2 maximum"
+  
+  DEVICE_CONFIG:
+    name: "Device Configuration"
+    description: "Device not within operational specifications"
+    impact: "Limits to Type 2 maximum"
+  
+  ENV_COND:
+    name: "Environmental Conditions"
+    description: "Environmental conditions outside specifications"
+    impact: "Limits to Type 2 maximum"
+  
+  VISIBILITY:
+    name: "Visibility"
+    description: "Poor visibility conditions"
+    impact: "Limits to Type 3 maximum"
+  
+  CLASSIFICATION:
+    name: "Classification"
+    description: "Classification/attribution not documented"
+    impact: "Limits to Type 3 maximum"
+  
+  REACH_COVERAGE:
+    name: "Reach Coverage"
+    description: "Insufficient reach coverage"
+    impact: "Limits to Type 3 maximum"
+  
+  TIMING:
+    name: "Timing"
+    description: "Poor timing of surveys"
+    impact: "Limits to Type 3 maximum"
+  
+  VISITS:
+    name: "Number of Visits"
+    description: "Insufficient number of survey visits"
+    impact: "Limits to Type 4 maximum"
+  
+  TRAP_EFF:
+    name: "Trap Efficiency"
+    description: "Trap efficiency not measured/validated"
+    impact: "Limits to Type 3 maximum"
+  
+  EFF_STD:
+    name: "Effort Standardization"
+    description: "Effort not standardized"
+    impact: "Limits to Type 4 maximum"
+  
+  MR_ASSUMP:
+    name: "Mark-Recapture Assumptions"
+    description: "MR assumptions not evaluated"
+    impact: "Limits to Type 3 maximum"
+  
+  DETECTABILITY:
+    name: "Detectability"
+    description: "Detectability factors not validated"
+    impact: "Limits to Type 3 maximum"
+  
+  PRECISION_ACCURACY:
+    name: "Precision/Accuracy"
+    description: "Precision/accuracy weaker than expected for type"
+    impact: "Downgrades by one level"

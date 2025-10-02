@@ -1,0 +1,11 @@
+# R Environment Management
+# This file is used by renv to manage R package dependencies
+
+# R version
+R_VERSION=4.3.0
+
+# Package repository
+R_REPOS=https://cran.rstudio.com/
+
+# Lock file location
+RENV_LOCKFILE=renv.lock
