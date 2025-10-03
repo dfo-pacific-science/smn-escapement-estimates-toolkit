@@ -4,7 +4,6 @@
 library(shiny)
 library(shinydashboard)
 library(DT)
-library(plotly)
 library(dplyr)
 library(tidyr)
 library(ggplot2)

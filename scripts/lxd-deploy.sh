@@ -26,7 +26,7 @@ apt-get install -y python3 python3-pip
 # Install required R packages
 echo "Installing required R packages..."
 R --slave -e "
-packages <- c('shiny', 'shinydashboard', 'DT', 'plotly', 'dplyr', 'tidyr', 'ggplot2', 'markdown', 'shinyjs', 'yaml')
+packages <- c('shiny', 'shinydashboard', 'DT', 'dplyr', 'tidyr', 'ggplot2', 'markdown', 'shinyjs', 'yaml')
 for (pkg in packages) {
   if (!require(pkg, character.only = TRUE)) {
     install.packages(pkg, repos = 'https://cran.r-project.org')

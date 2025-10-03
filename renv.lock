@@ -30,13 +30,6 @@
       "Repository": "CRAN",
       "Hash": "ghi789"
     },
-    "plotly": {
-      "Package": "plotly",
-      "Version": "4.10.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "jkl012"
-    },
     "readxl": {
       "Package": "readxl",
       "Version": "1.4.0",

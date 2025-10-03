@@ -6,7 +6,7 @@ An interactive R Shiny application for classifying salmon escapement estimates u
 
 ### Prerequisites
 - **R** (>= 4.0.0)
-- **R Packages**: shiny, shinydashboard, DT, plotly, dplyr, tidyr, ggplot2, markdown, shinyjs, yaml
+- **R Packages**: shiny, shinydashboard, DT, dplyr, tidyr, ggplot2, markdown, shinyjs, yaml
 
 ### Quick Setup (Windows)
 ```powershell
@@ -20,7 +20,7 @@ An interactive R Shiny application for classifying salmon escapement estimates u
 ### Manual Setup
 ```r
 # Install required packages (if not already installed)
-install.packages(c("shiny", "shinydashboard", "DT", "plotly", "dplyr", "tidyr", "ggplot2", "markdown", "shinyjs", "yaml"))
+install.packages(c("shiny", "shinydashboard", "DT", "dplyr", "tidyr", "ggplot2", "markdown", "shinyjs", "yaml"))
 
 # Run the app
 shiny::runApp('app.R', port=3838, host='127.0.0.1')
@@ -187,7 +187,7 @@ key_data <- load_structured_classification_key()
 ## 📋 Requirements
 
 - **R** (>= 4.0.0)
-- **R Packages**: shiny, shinydashboard, DT, plotly, dplyr, tidyr, ggplot2, markdown, shinyjs, yaml
+- **R Packages**: shiny, shinydashboard, DT, dplyr, tidyr, ggplot2, markdown, shinyjs, yaml
 - **Python** (>= 3.8) for document conversion scripts (optional)
 - **Pandoc** for generating Word documents from R Markdown (optional)
 
